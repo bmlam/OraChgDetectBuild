@@ -1,0 +1,6 @@
+{ "connectData": 
+  [ { "dummy": "gd1", "host": "12" , "port": "xx" , "service": "xx" , "user": "u1" }
+   ,{ "targetDb": "gd1", "host": "10.10.8.188" , "port": "1251" , "service": "pgbliongd1" , "user": "lionrep" }
+   ,{ "targetDb": "gt2", "host": "10.10.8.199" , "port": "1251" , "service": "pgbliongt2" , "user": "lionrep" }
+  ]
+}
