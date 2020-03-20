@@ -8,7 +8,7 @@ call example:
 
 """
 
-import argparse, inspect, os, re, subprocess, sys, tempfile 
+import argparse, inspect, os, re, subprocess, sys, tempfile , zipfile 
 from dbx import _dbx, _infoTs, _errorExit, setDebug
 
 g_path_separator = "\\"
@@ -22,11 +22,11 @@ def parseCmdLine() :
   global g_scriptTemplatePath 
   parser = argparse.ArgumentParser()
   # lowercase shortkeys
-  parser.add_argument( '-a', '--action', help='make: create the install scripts, extract: only print touched scripts', choices=[ 'extract', 'make' ], default="make" )
+  parser.add_argument( '-a', '--action', help='make: create the install scripts, extract: only print touched scripts, zip: files touched since baseCommit', choices=[ 'extract', 'make', 'zip' ], default="make" )
   parser.add_argument( '-b', '--baseCommit', help='baseline commit, used to determined touched scripts up to HEAD' )
   parser.add_argument( '-f', '--featureName', help='branch or feature name, will be used as part of install SQL script names', default="unknown_feature"  )
   parser.add_argument( '-l', '--lastCommit', help='last commit, used to determined touched scripts from base up to here', required= False, default= "HEAD" )
-  parser.add_argument( '-t', '--sqlScriptTemplatePath', help='path of install script template', required= True )
+  parser.add_argument( '-t', '--sqlScriptTemplatePath', help='path of install script template', required= False )
   parser.add_argument( '--debug', help='print debugging messages', required= False, action='store_true' )
   parser.add_argument( '--no-debug', help='do not print debugging messages', dest='debug', action='store_false'  )
   parser.add_argument( '--storeRelMeta', help='store release metadata to DB', required= False, action='store_true' )
@@ -246,24 +246,58 @@ def extractTouchedScripts( commitA, commitB="HEAD" ):
   _dbx( len( scriptsSet) )
   return list( scriptsSet )
 
+def action_createZip( files ):
+  """zip the given files:
+  1. if at least 1 file starts with root, find a common root of all. In worst case it is the root. 
+     For example /a/b/file1.txt and /a/foo/bar.py  would have /a as common root 
+  2. remove the common root from all 
+     The 2 files above become b/file1.txt foo/bar.py 
+  3. put the files into the zip with the remaining relative paths
+  """
+  if len( files ) == 0 :
+    raise ValueError( "list of files is empty" )
+
+  if files[0].startswith( "/" ):
+    # if any file path starts with root, we strip off the common prefix
+    commonRoot = os.path.commonprefix( files )
+    _dbx( "commonRoot %s" % commonRoot )
+    pathsUsed = [ os.path.relpath( file, commonRoot ).rstrip("\n")  for file in files ]
+  else:
+    pathsUsed = [ file.rstrip("\n")  for file in files ]
+  _dbx( "pathsUsed %s" %  pathsUsed )
+
+  zipArcPath = tempfile.mkstemp( suffix = ".zip") [1]
+  _dbx( "zipArcPath  type %s" %  zipArcPath )
+
+  if True:
+    with zipfile.ZipFile( zipArcPath, 'w') as zipArc:
+     for filePath in pathsUsed:
+       zipArc.write(filePath)
+
+  return zipArcPath 
+
 def main(): 
   global g_listIndexedBySchemaType, g_scriptTemplatePath
 
-  argParseResult = parseCmdLine()
-  setDebug( argParseResult.debug ) 
-  if argParseResult.baseCommit:
-    linesOfTouchedScripts = extractTouchedScripts( commitA= argParseResult.baseCommit, commitB = argParseResult.lastCommit )
+  cmdLnConfig = parseCmdLine()
+  setDebug( cmdLnConfig.debug ) 
+  if cmdLnConfig.baseCommit:
+    linesOfTouchedScripts = extractTouchedScripts( commitA= cmdLnConfig.baseCommit, commitB = cmdLnConfig.lastCommit )
   else: 
     _infoTs( "reading touched lines from stdin.." )
     linesOfTouchedScripts = sys.stdin.readlines()
-  _dbx( "scripts found: %s" % len( linesOfTouchedScripts ) )
-  if True: # "extract of lines" == "is ok": 
+
+  if cmdLnConfig.action == "extract":
+    _infoTs( "scripts found: %s" % "\n".join( linesOfTouchedScripts ) )
+  elif cmdLnConfig.action == "make":
     fill_listIndexedBySchemaType( linesOfTouchedScripts= linesOfTouchedScripts ) 
     createSchemataInstallScripts( sqlScriptTemplatePath= g_scriptTemplatePath \
-      , baseCommit= argParseResult.baseCommit, lastCommit= argParseResult.lastCommit \
-      , featureName= argParseResult.featureName, storeReleaseMetadata = argParseResult.storeRelMeta  \
+      , baseCommit= cmdLnConfig.baseCommit, lastCommit= cmdLnConfig.lastCommit \
+      , featureName= cmdLnConfig.featureName, storeReleaseMetadata = cmdLnConfig.storeRelMeta  \
       ) 
-  
+  elif cmdLnConfig.action == "zip":
+    zipFile = action_createZip( files = linesOfTouchedScripts )
+    _infoTs( "zip file created at %s" % zipFile )
 
 if __name__ == "__main__" : 
   main()
