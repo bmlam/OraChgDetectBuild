@@ -8,7 +8,7 @@ call example:
 
 Example for connectQuad: 10.10.8.188:1521:pdbliongd1:lionrep
 """
-import argparse, enum, json, os, re, subprocess, sys, shutil, tempfile
+import argparse, enum, json, os, re, subprocess, sys, shutil, tempfile, time 
 
 ## my modules 
 from dbx import _dbx, _infoTs, _errorExit, setDebug
@@ -155,16 +155,23 @@ def uglyFormat( inputFilePath ):
     
   return outPath
 
-def CopyFilesForObjectListForEnv( envCode, objectList ):
+def CopyFilesForObjectListForEnv( envCode, objectList, staleMinutesOk= 20 ):
   dbName = g_mapDbNameOfEnvCode[ envCode ]
   _dbx( "db %s" % ( dbName ) ) 
-  
-  
+  now = time.time() # returns seconds since epoch
   for obj in objectList: 
     scriptPath = getDdlScriptPath( object= obj, dbName= dbName )
+    fileModTime = os.path.getmtime( scriptPath )
+    _dbx( "now: %s mtime: %s" % ( now, fileModTime ) )
+    elaMinutues = (now - fileModTime) / 60 
+    _dbx( "elaMinutues %s" % elaMinutues )
+    if elaMinutues > staleMinutesOk :
+      raise ValueError( "file %s is %s minutes old!" % ( scriptPath, elaMinutues ) )
     if not os.path.exists( scriptPath ):
       _infoTs( "File %s does not seem to exist!" % ( scriptPath ) ) 
     else:
+      
+      shutil.copy( scriptPath, g_diffLocation  ) # lets also copy the original 
       formattedOutPath = uglyFormat( inputFilePath = scriptPath )
       shutil.copy( formattedOutPath, g_diffLocation  )
       _infoTs( "File %s copied to target" % ( formattedOutPath ) ) 
@@ -205,7 +212,7 @@ def action_dbs ( envCsv, objCsv ):
   action_extractScripts( objCsv = objCsv, envCsv= envCsv ) 
 
   for env in envList:
-    CopyFilesForObjectListForEnv( envCode= env, objectList= objectList )
+    CopyFilesForObjectListForEnv( envCode= env, objectList= objectList, staleMinutesOk= 60 )
   
 def action_grepInst ( baseLocation, inputRelPaths ):
   objectScripts = []

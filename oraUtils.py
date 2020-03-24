@@ -1,7 +1,7 @@
 #! /c/Users/bonlam/AppData/Local/Programs/Python/Python37-32/python3
 """ various utilities for working with Oracle database 
 """
-import getpass, json, os, subprocess, tempfile
+import getpass, inspect, json, os, subprocess, tempfile, sys 
 from collections import namedtuple
 
 from dbx import _dbx, _infoTs, _errorExit, setDebug
@@ -32,11 +32,14 @@ class DBObject ( namedtuple( 'DBObject', 'owner, name, type, fileExt' ) ):
     tokens = tokensByBackSl if len( tokensByBackSl ) > 0 else tokensByForwSl
     owner, type, fileName = tokens
 
-def loadOraConnectionData( inputFilePath = './ora_connection_cfg.json' ):
+def loadOraConnectionData( inputFilePath = None):
   """read connection data from json input file and return a list of dictionaires to the caller
   NO CONNECTIONs are actually opened to the database! Also password must be acquired by 
   other means.
   """
+  if inputFilePath == None:
+    moduleSelfDir = os.path.dirname( inspect.getfile(inspect.currentframe()) ) 
+    inputFilePath = os.path.join ( moduleSelfDir, './ora_connection_cfg.json' ) 
   if not os.path.exists( inputFilePath ):
     _errorExit( "File %s does not seem to exist!" % ( inputFilePath ) ) 
   
