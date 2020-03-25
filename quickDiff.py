@@ -30,7 +30,7 @@ g_mapDbNameOfEnvCode = { "gd1" : "PDBLIONGD1"
 
 
 g_baseOfDDLScripts = "c:\\temp"
-g_diffLocation = "c:\\temp/for-diff"
+g_diffLocation = "c:\\temp\\for-diff"
 
 
 def parseCmdLine() :
@@ -159,24 +159,34 @@ def CopyFilesForObjectListForEnv( envCode, objectList, staleMinutesOk= 20 ):
   dbName = g_mapDbNameOfEnvCode[ envCode ]
   _dbx( "db %s" % ( dbName ) ) 
   now = time.time() # returns seconds since epoch
+
+  originFilePathsInDiffArea = formattedFilePaths = []
+
   for obj in objectList: 
-    scriptPath = getDdlScriptPath( object= obj, dbName= dbName )
-    fileModTime = os.path.getmtime( scriptPath )
+    orginScriptPath = getDdlScriptPath( object= obj, dbName= dbName )
+    fileModTime = os.path.getmtime( orginScriptPath )
     _dbx( "now: %s mtime: %s" % ( now, fileModTime ) )
     elaMinutues = (now - fileModTime) / 60 
     _dbx( "elaMinutues %s" % elaMinutues )
     if elaMinutues > staleMinutesOk :
-      raise ValueError( "file %s is %s minutes old!" % ( scriptPath, elaMinutues ) )
-    if not os.path.exists( scriptPath ):
-      _infoTs( "File %s does not seem to exist!" % ( scriptPath ) ) 
+      raise ValueError( "file %s is %s minutes old!" % ( orginScriptPath, elaMinutues ) )
+    if not os.path.exists( orginScriptPath ):
+      _infoTs( "File %s does not seem to exist!" % ( orginScriptPath ) ) 
     else:
-      
-      shutil.copy( scriptPath, g_diffLocation  ) # lets also copy the original 
-      formattedOutPath = uglyFormat( inputFilePath = scriptPath )
-      shutil.copy( formattedOutPath, g_diffLocation  )
-      _infoTs( "File %s copied to target" % ( formattedOutPath ) ) 
+      # lets also copy the original but leave a copy for users convenience 
+      newPathOfOriginFile = os.path.join( g_diffLocation, os.path.basename( orginScriptPath ) )      
+      shutil.copy( orginScriptPath, newPathOfOriginFile  ) 
+      originFilePathsInDiffArea.append( newPathOfOriginFile )
 
+      # create formatted copy and MOVE it to diff area 
+      formattedOutPath = uglyFormat( inputFilePath = orginScriptPath )
+      newPathOfFormattedFile = os.path.join( g_diffLocation,  os.path.basename( formattedOutPath ) )      
+      shutil.move( formattedOutPath, formattedOutPath  )
+      formattedFilePaths.append( newPathOfFormattedFile ) 
 
+      _infoTs( "Formatted file to be found as %s " % ( newPathOfFormattedFile ) ) 
+
+  return originFilePathsInDiffArea , formattedFilePaths
 
 #### 
 def action_extractScripts( objCsv, envCsv, executeScript= True, connData= None ):
@@ -203,16 +213,31 @@ def action_extractScripts( objCsv, envCsv, executeScript= True, connData= None )
       subprocess.call( f"sqlplus /nolog @{sqlplusScriptPath}" )
       _infoTs( "Executed sqlplus script.", True )
   
+def getHtmlDiffOutput( fileA, fileB ):
+  contentA = read_file(fileA.strip())
+  contentB = read_file(fileB.strip())
+  hd = difflib.HtmlDiff( tabsize=2, wrapcolumn=120 )
+  output = hd.make_file(contentA, contentB )
+  return 
+  
 def action_dbs ( envCsv, objCsv ):
   """ Extract DDL script for objects given by cmdArgs
   """
   objectList = getObjectList( objCsv )
   envList = envCsv.split( "," )
-  
-  action_extractScripts( objCsv = objCsv, envCsv= envCsv ) 
+  if len ( envList ) > 2:
+    raise ValueError( "diff report cannot be created for more than 2 databases. Consider action extract!" )
 
-  for env in envList:
-    CopyFilesForObjectListForEnv( envCode= env, objectList= objectList, staleMinutesOk= 60 )
+  # regardless we if need to process 1 or 2 databases, we need to extract the scripts to the target location first 
+  action_extractScripts( objCsv = objCsv, envCsv= envCsv ) 
+  
+  for ix, env in enumerate( envList ):
+    if ix == 0:
+      dbOneOriginPaths, dbOneFormattedPaths =  CopyFilesForObjectListForEnv( envCode= env, objectList= objectList, staleMinutesOk= 60 )
+    elif ix == 1: 
+      dbTwoOriginPaths, dbTwoFormattedPaths =  CopyFilesForObjectListForEnv( envCode= env, objectList= objectList, staleMinutesOk= 60 )
+  if len( envList ) == 2:
+    _errorExit( "getHtmlDiffOutput method coded but not yet used! " )
   
 def action_grepInst ( baseLocation, inputRelPaths ):
   objectScripts = []
