@@ -1,3 +1,5 @@
+import inspect, sys, time 
+
 g_dbxActive = True 
 g_dbxCnt = 0
 g_maxDbxMsg = 999
@@ -14,7 +16,7 @@ def _infoTs ( text , withTs = False ):
 	if withTs :
 		print( '%s (Ln%d) %s' % ( time.strftime("%H:%M:%S"), inspect.stack()[1][2], text ) )
 	else :
-		print( '(Ln%d) %s' % ( inspect.stack1G()[1][2], text ) )
+		print( '(Ln%d) %s' % ( inspect.stack()[1][2], text ) )
 
 def _errorExit ( text ):
 	print( 'ERROR raised from %s - Ln%d: %s' % ( inspect.stack()[1][3], inspect.stack()[1][2], text ) )

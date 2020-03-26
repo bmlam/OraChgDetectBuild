@@ -8,13 +8,14 @@ call example:
 
 Example for connectQuad: 10.10.8.188:1521:pdbliongd1:lionrep
 """
-import argparse, enum, json, os, re, subprocess, sys, shutil, tempfile, time 
+import argparse, difflib, enum, json, os, re, subprocess, sys, shutil, tempfile, time 
 
 ## my modules 
 from dbx import _dbx, _infoTs, _errorExit, setDebug
 from textFileUtils import genUnixDiff, persistAndPrintName
 import charCounter, plstopa, fsm, oraUtils 
 
+g_defaultBranchName = "branch_xyz"
 
 g_mapDbNameOfEnvCode = { "gd1" : "PDBLIONGD1"
 , "gt2" : "PDBLIONGT2"
@@ -45,6 +46,7 @@ def parseCmdLine() :
   parser.add_argument( '-b', '--baseLocation', help='base location of input files' )
   # parser.add_argument( '-c', '--connectQuad', help='Oracle connect 4-tuple h:p:s:u to the database to extract scripts from' )
   parser.add_argument( '-e', '--environments' , help='comma separated list of environment codes, e.g prod, uat2, gt2', required= False )
+  parser.add_argument( '-f', '--featureName', help='branch or feature name, will be used to qualify the file name', default= g_defaultBranchName  )  
   parser.add_argument( '-i', '--inputFilePath' , help='path to input file', required= False )
   parser.add_argument( '-I', '--inputRelPaths' , help='comma separated input file paths', required= False )
   parser.add_argument( '-j', '--jsonCfgFile' , help='json file containing various input data', required= False )
@@ -160,7 +162,8 @@ def CopyFilesForObjectListForEnv( envCode, objectList, staleMinutesOk= 20 ):
   _dbx( "db %s" % ( dbName ) ) 
   now = time.time() # returns seconds since epoch
 
-  originFilePathsInDiffArea = formattedFilePaths = []
+  originFilePathsInDiffArea = []
+  formattedFilePaths = []
 
   for obj in objectList: 
     orginScriptPath = getDdlScriptPath( object= obj, dbName= dbName )
@@ -173,18 +176,26 @@ def CopyFilesForObjectListForEnv( envCode, objectList, staleMinutesOk= 20 ):
     if not os.path.exists( orginScriptPath ):
       _infoTs( "File %s does not seem to exist!" % ( orginScriptPath ) ) 
     else:
+      prefix, fileExt = os.path.splitext( os.path.basename( orginScriptPath ) )
+
       # lets also copy the original but leave a copy for users convenience 
-      newPathOfOriginFile = os.path.join( g_diffLocation, os.path.basename( orginScriptPath ) )      
+      newBaseName = prefix + '-orgF' + fileExt
+      newPathOfOriginFile = os.path.join( g_diffLocation, newBaseName )      
       shutil.copy( orginScriptPath, newPathOfOriginFile  ) 
+      _dbx( "newPathOfOriginFile %s" % ( newPathOfOriginFile ) ) 
       originFilePathsInDiffArea.append( newPathOfOriginFile )
 
       # create formatted copy and MOVE it to diff area 
       formattedOutPath = uglyFormat( inputFilePath = orginScriptPath )
-      newPathOfFormattedFile = os.path.join( g_diffLocation,  os.path.basename( formattedOutPath ) )      
-      shutil.move( formattedOutPath, formattedOutPath  )
+
+      newBaseName = prefix + '-ugly' + fileExt
+      newPathOfFormattedFile = os.path.join( g_diffLocation, newBaseName  )      
+
+      shutil.move( formattedOutPath, newPathOfFormattedFile  )
+      _infoTs( "Formatted file to be found as %s " % ( newPathOfFormattedFile ) ) 
       formattedFilePaths.append( newPathOfFormattedFile ) 
 
-      _infoTs( "Formatted file to be found as %s " % ( newPathOfFormattedFile ) ) 
+  # _errorExit( "originFilePathsInDiffArea len %s, formattedFilePaths len %s" % ( len( originFilePathsInDiffArea), len( formattedFilePaths) ) )
 
   return originFilePathsInDiffArea , formattedFilePaths
 
@@ -204,7 +215,7 @@ def action_extractScripts( objCsv, envCsv, executeScript= True, connData= None )
 
     objectList = getObjectList( objCsv )
     
-
+    _infoTs( "fixme: make extraction of script optional!" )
     sqlplusScriptPath =  oraUtils.spoolScriptWithSqlplusTempClob ( dbObjects = objectList, conn = conn, spoolDestRoot= "C:\\temp\\" , dirSep="\\" )
     
     if executeScript:
@@ -214,16 +225,21 @@ def action_extractScripts( objCsv, envCsv, executeScript= True, connData= None )
       _infoTs( "Executed sqlplus script.", True )
   
 def getHtmlDiffOutput( fileA, fileB ):
-  contentA = read_file(fileA.strip())
-  contentB = read_file(fileB.strip())
-  hd = difflib.HtmlDiff( tabsize=2, wrapcolumn=120 )
-  output = hd.make_file(contentA, contentB )
-  return 
+  contentA = open(fileA.strip(), "r").readlines()
+  contentB = open(fileB.strip(), "r").readlines()
+  
+  hd = difflib.HtmlDiff( tabsize=2, wrapcolumn=100 )
+  output = hd.make_file(contentA, contentB, context= True \
+    , fromdesc= os.path.basename(fileA), todesc= os.path.basename( fileB )
+  )
+
+  return output 
   
 def action_dbs ( envCsv, objCsv ):
   """ Extract DDL script for objects given by cmdArgs
   """
   objectList = getObjectList( objCsv )
+  # _errorExit( "test exit %s" % ( len( objectList ) ) ) 
   envList = envCsv.split( "," )
   if len ( envList ) > 2:
     raise ValueError( "diff report cannot be created for more than 2 databases. Consider action extract!" )
@@ -234,10 +250,22 @@ def action_dbs ( envCsv, objCsv ):
   for ix, env in enumerate( envList ):
     if ix == 0:
       dbOneOriginPaths, dbOneFormattedPaths =  CopyFilesForObjectListForEnv( envCode= env, objectList= objectList, staleMinutesOk= 60 )
+      _dbx( "dbOneOriginPaths len: %s" % ( len( dbOneOriginPaths ) ) )
     elif ix == 1: 
       dbTwoOriginPaths, dbTwoFormattedPaths =  CopyFilesForObjectListForEnv( envCode= env, objectList= objectList, staleMinutesOk= 60 )
+
+  concatDiffReport = "\n"
   if len( envList ) == 2:
-    _errorExit( "getHtmlDiffOutput method coded but not yet used! " )
+    # _errorExit( "getHtmlDiffOutput method coded but not yet used! " )
+    for i in range( len( dbOneOriginPaths ) ):
+      file1 = dbOneOriginPaths[i]
+      file2 = dbTwoOriginPaths[i]
+      concatDiffReport +=  getHtmlDiffOutput( fileA= file1, fileB= file2 ) 
+      _dbx( len( concatDiffReport ) )
+
+    diffRepFile = tempfile.mkstemp( suffix= "-accu-diffs.html" )[1]
+    open( diffRepFile, "w" ).write(  concatDiffReport ) 
+    _infoTs( "Diff report generated as %s " % ( diffRepFile ) )
   
 def action_grepInst ( baseLocation, inputRelPaths ):
   objectScripts = []
@@ -262,13 +290,20 @@ def action_grepInst ( baseLocation, inputRelPaths ):
   else: 
     _infoTs( "No object scripts have been identified!" ) 
 
-def action_os ( inputFilePath):
+def action_os ( inputFilePath, branchName= g_defaultBranchName ):
     if not os.path.exists( inputFilePath ):
-      _infoTs( "File %s does not seem to exist!" % ( inputFilePath ) ) 
+      raise ValueError( "File %s does not seem to exist!" % ( inputFilePath ) ) 
     else:
+      prefix, fileExt = os.path.splitext( os.path.basename( inputFilePath ) )
+      newBaseName = prefix + '-' + branchName + "-orgF" + fileExt 
+      tgtPathOfOrgFile = os.path.join( g_diffLocation, newBaseName )
+      shutil.copy( inputFilePath, tgtPathOfOrgFile  )
+
       formattedOutPath = uglyFormat( inputFilePath = inputFilePath )
-      shutil.copy( formattedOutPath, g_diffLocation  )
-      _infoTs( "File %s copied to target" % ( formattedOutPath ) ) 
+      newBaseName = prefix + '-' + branchName + "-ugly" + fileExt 
+      tgtPathOfFormattedFile = os.path.join( g_diffLocation, newBaseName )
+      shutil.move( formattedOutPath, tgtPathOfFormattedFile )
+      _infoTs( "Formatted file %s moved to target" % ( tgtPathOfFormattedFile ) ) 
 
 def action_testJson ( inputFilePath):
     if not os.path.exists( inputFilePath ):
@@ -291,7 +326,7 @@ def main():
   elif argParserResult.action == 'grepInst':
     action_grepInst( baseLocation= argParserResult.baseLocation, inputRelPaths = argParserResult.inputRelPaths )
   elif argParserResult.action == 'os':
-    action_os( inputFilePath = argParserResult.inputFilePath )
+    action_os( inputFilePath = argParserResult.inputFilePath, branchName= argParserResult.featureName )
   elif argParserResult.action == 'testJson':
     action_testJson( inputFilePath = argParserResult.jsonCfgFile )
 
