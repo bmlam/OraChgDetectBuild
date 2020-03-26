@@ -19,7 +19,6 @@ def dosPath2Unix( inp ):
   return inp.replace( "C:" , r"/c/" ).replace( "\\", r"/" )
 
 def parseCmdLine() :
-  global g_scriptTemplatePath 
   parser = argparse.ArgumentParser()
   # lowercase shortkeys
   parser.add_argument( '-a', '--action', help='make: create the install scripts, extract: only print touched scripts, zip: files touched since baseCommit', choices=[ 'extract', 'make', 'zip' ], default="make" )
@@ -36,10 +35,8 @@ def parseCmdLine() :
 
   result= parser.parse_args()
   if result.action == "make":
-    if result.sqlScriptTemplatePath == None:
-      raise ValueError( "for action %s, sqlScriptTemplatePath must be provided!" % (result.action) )
-  if result.sqlScriptTemplatePath != None:
-    g_scriptTemplatePath = result.sqlScriptTemplatePath 
+    if result.baseCommit == None:
+      raise ValueError( "for action %s, baseCommit must be provided!" % (result.action) )
 
   if result.lastCommit != None and result.lastCommit != 'HEAD':
     raise ValueError( "currently only HEAD is supported as lastCommit!" ) 
@@ -277,8 +274,9 @@ def action_createZip( files ):
   return zipArcPath 
 
 def main(): 
-  global g_listIndexedBySchemaType, g_scriptTemplatePath
+  global g_listIndexedBySchemaType
 
+  
   cmdLnConfig = parseCmdLine()
   setDebug( cmdLnConfig.debug ) 
   if cmdLnConfig.baseCommit:
@@ -290,8 +288,14 @@ def main():
   if cmdLnConfig.action == "extract":
     _infoTs( "scripts found: %s" % "\n".join( linesOfTouchedScripts ) )
   elif cmdLnConfig.action == "make":
+    sqlInstallTemplateFile = cmdLnConfig.sqlScriptTemplatePath
+    if sqlInstallTemplateFile == None:
+      moduleSelfDir = os.path.dirname( inspect.getfile(inspect.currentframe()) )
+      sqlInstallTemplateFile = os.path.join ( moduleSelfDir, './install_template.sql' )
+    _infoTs( "Will use following file as SQL install template: %s" % sqlInstallTemplateFile )
+
     fill_listIndexedBySchemaType( linesOfTouchedScripts= linesOfTouchedScripts ) 
-    createSchemataInstallScripts( sqlScriptTemplatePath= g_scriptTemplatePath \
+    createSchemataInstallScripts( sqlScriptTemplatePath= sqlInstallTemplateFile  \
       , baseCommit= cmdLnConfig.baseCommit, lastCommit= cmdLnConfig.lastCommit \
       , featureName= cmdLnConfig.featureName, storeReleaseMetadata = cmdLnConfig.storeRelMeta  \
       ) 
