@@ -216,7 +216,7 @@ def action_extractScripts( objCsv, envCsv, executeScript= True, connData= None )
     objectList = getObjectList( objCsv )
     
     _infoTs( "fixme: make extraction of script optional!" )
-    sqlplusScriptPath =  oraUtils.spoolScriptWithSqlplusTempClob ( dbObjects = objectList, conn = conn, spoolDestRoot= "C:\\temp\\" , dirSep="\\" )
+    sqlplusScriptPath =  oraUtils.spoolScriptWithSqlplusTempClob ( dbObjects = objectList, conn = conn, spoolDestRoot= "C:\\temp\\" , dirSep="\\", envCode=envCode )
     
     if executeScript:
       # dummyInput = input( "Hit ENTER to run SQPLUS script" )

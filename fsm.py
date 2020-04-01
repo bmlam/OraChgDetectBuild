@@ -3,29 +3,9 @@ import enum, inspect, re, sys
 # my modules
 from plstopa import FsmState, gettokentype, StateStack, TokenNode, TokenStack, TokenType, flowControlStartKeywords, declarationKeywords
 
+from dbx import _dbx, _infoTs, _errorExit, setDebug
+
 foo = "got here"
-
-g_dbxActive = False
-g_dbxCnt = 0
-g_maxDbxMsg = 99600
-
-def _dbx ( text ):
-	global g_dbxCnt , g_dbxActive
-	if g_dbxActive :
-		print( 'dbx%d: %s - Ln%d: %s' % ( g_dbxCnt, inspect.stack()[1][3], inspect.stack()[1][2], text ) )
-		g_dbxCnt += 1
-		if g_dbxCnt > g_maxDbxMsg:
-			_errorExit( "g_maxDbxMsg of %d exceeded" % g_maxDbxMsg )
-
-def _infoTs ( text , withTs = False ):
-	if withTs :
-		print( '%s (Ln%d) %s' % ( time.strftime("%H:%M:%S"), inspect.stack()[1][2], text ) )
-	else :
-		print( '(Ln%d) %s' % ( inspect.stack()[1][2], text ) )
-
-def _errorExit ( text ):
-	print( 'ERROR raised from %s - Ln%d: %s' % ( inspect.stack()[1][3], inspect.stack()[1][2], text ) )
-	sys.exit(1)
 
 ###
 def scanEndOfSQLiteral( str ):
@@ -195,7 +175,9 @@ def plsqlTokenize ( inpLines ):
 
 					continue # we must skip the fine-grained FSM 
 				else:
-					_errorExit( "Rest of line %d could not be tokenized. Line content follows \n%s" % ( lineNo, lnBuf ) )
+					_infoTs( "Rest of line %d could not be tokenized. Line content follows \n%s" % ( lineNo, lnBuf ) )
+					return nodeStack
+
 			else: 
 				# second re group i.e. token 
 				tok = m.group( 2 ) 
