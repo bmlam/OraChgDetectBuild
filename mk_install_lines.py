@@ -92,7 +92,7 @@ def fill_listIndexedBySchemaType( linesOfTouchedScripts ):
         g_listIndexedBySchemaType[ schemaType ].append ( script ) 
 
 
-def createSchemataInstallScripts( sqlScriptTemplatePath, baseCommit, lastCommit, featureName= "test", storeReleaseMetadata= True ):
+def createSchemataInstallScripts( sqlScriptTemplatePath, baseCommit, lastCommit, featureName= None, fileSufix= None, storeReleaseMetadata= True ):
   """ Create SQL and BAT install scripts for the schemata with deployable scripts
   Deployable scripts are: 1) file is not at top level of the schema 
   and 2) extension is not blacklisted 
@@ -118,7 +118,7 @@ END;
 /
   """
 
-  suffixUsed = "-"+featureName if featureName != "" else ""
+  suffixUsed = "-"+fileSufix if fileSufix else ""
   sentinelPatPrefix = "REM place_here_scripts_for:"
   fh = open( sqlScriptTemplatePath, mode="r" )
   inpTemplateLines = fh.readlines()
