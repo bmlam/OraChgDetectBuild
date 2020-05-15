@@ -270,7 +270,7 @@ EXIT
 
 
 
-def spoolScriptWithSqlplusTempClob ( spoolDestRoot, dirSep, dbObjects, conn= None, envCode= None ): 
+def spoolScriptWithSqlplusTempClob ( spoolDestRoot, dirSep, dbObjects, conn= None, envCode= None, clobTempTable = 'tt_extract_ddl_clob' ): 
   """ Use sqlplus 
     This method requires a global table accessible by the connecting user to write 
     the source code extracted from DBA_SOURCE line by line as CLOB 
@@ -342,7 +342,7 @@ BEGIN
     ELSE lv_object_type
     END;
 
-  EXECUTE IMMEDIATE 'truncate  table tt_extract_ddl_clob';
+  EXECUTE IMMEDIATE 'truncate  table {clobTempTable}';
   FOR rec IN (
     SELECT line, text
     FROM dba_source
@@ -356,7 +356,7 @@ BEGIN
     -- dbms_OUTPUT.put_line( 'Ln'||$$plsql_line||': '||lv_offset );
     -- IF mod(rec.line, 13) = 1 THEN       dbms_output.put_line( rec.text );    END IF;
   END LOOP;
-  INSERT INTO tt_extract_ddl_clob( text ) VALUES ( lv_clob );
+  INSERT INTO {clobTempTable} ( text ) VALUES ( lv_clob );
   COMMIT;
 END;
 /
@@ -366,7 +366,7 @@ set termout off trimspool on head off
 spool &spool_path_current
 
 
-SELECT text FROM tt_extract_ddl_clob ;
+SELECT text FROM {clobTempTable} ;
 
 spool off
 """
@@ -392,10 +392,12 @@ EXIT
     sqlpTermoutFh = open( sqlTermoutPath, "r" )
     _dbx( sqlpTermoutFh.readlines() )
   else: # build one script block per DBObject
-    
+    _infoTs( "The connecting user will need access to global temporary table %s !" % clobTempTable )
     scriptBlocks= []
     for obj in dbObjects:
-      scriptBlocks.append( scriptBlockFor1Object.format( spool_dest_root= spoolDestRoot, lv_schema= obj.owner, lv_object_type= obj.type, lv_object_name= obj.name, dir_sep= dirSep ) )
+      scriptBlocks.append( scriptBlockFor1Object.format( spool_dest_root= spoolDestRoot, 
+        lv_schema= obj.owner, lv_object_type= obj.type, lv_object_name= obj.name, dir_sep= dirSep,
+        clobTempTable = clobTempTable ) )
 
     _dbx( "len( scriptBlocks ) : %d " % len( scriptBlocks ) )
 
