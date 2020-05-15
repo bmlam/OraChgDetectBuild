@@ -1,7 +1,7 @@
 #! /c/Users/bonlam/AppData/Local/Programs/Python/Python37-32/python3
 """ various utilities for working with Oracle database 
 """
-import getpass, inspect, json, os, subprocess, tempfile, sys 
+import getpass, inspect, json, os, platform, subprocess, tempfile, sys 
 from collections import namedtuple
 
 from dbx import _dbx, _infoTs, _errorExit, setDebug
@@ -70,28 +70,43 @@ class OraConnection ( namedtuple( 'OraConnection', 'host, port, service, usernam
   pass
 
 class NicknamedOraConnection ( namedtuple( 'NamedOraConnection', 'nickname, host, port, service, username' ) ):
-  pass
+  """ namedtuple() defines access methods for the attributes in the comma separated list. 
+    No other behaviour is required for this class 
+  """
+  pass 
     
-def getOraPassword ( oraUser, oraPasswordEnvVar, batchMode ):
+def getOraPassword ( oraUser, oraPasswordEnvVar, batchMode, envSuffix= "" ):
   """Prompt for Oracle password if it is not found from environment variable. 
   Password entered will be hidden.
+
+  oraPasswordEnvVar defines the OS environment variable name with which this method tries
+  to extract password. However, it is not uncommon that DEV environments may have the same 
+  username and password for an account that is uses to read the data dictionary, while 
+  higher environment like PROD and Pre-production has specific password for this user. 
+  Therefore if env_suffix is specified, this method first thing will string oraPasswordEnvVar and envSuffix
+  to get the password for that environment (=envSuffix). If such a variable is not found, it will
+  try to use the one given by oraPasswordEnvVar
+
+  fixme: batchMode is currently ignored!
   """
   passwordEnv= None; hiddenPassword= ""
-  if oraPasswordEnvVar in os.environ:
-    passwordEnv= os.environ[ oraPasswordEnvVar ]
-    if passwordEnv:
-      print('INFO: Found a value from the environment varable %s. Will use it if you just hit Enter on the password prompt' % oraPasswordEnvVar )
-      if batchMode:
-        return passwordEnv
-  else:
-    _errorExit ( "getpass does not work on Windows! Use environment variable " )
+  envVarToUse = oraPasswordEnvVar + envSuffix
+  if envVarToUse not in os.environ:
+    envVarToUse = oraPasswordEnvVar
 
-    print('INFO: Password could be passed as environment variable %s however it is not set.' % oraPasswordEnvVar )
-    hiddenPassword = getpass.getpass('Enter password for Oracle user %s. (The input will be hidden if supported by the OS platform)' % oraUser )
-  if hiddenPassword == "" :
-    if passwordEnv:
-      hiddenPassword= passwordEnv
-  return hiddenPassword
+  if envVarToUse in os.environ:
+    passwordEnv= os.environ[ envVarToUse ]
+
+  if platform.system() == "Windows":
+    if envVarToUse == None:
+      _errorExit('INFO: Password could be passed as environment variable %s however it is not set.' % ( envVarToUse) )
+    pwToUse = passwordEnv
+  else:
+    pwToUse = getpass.getpass('Enter password for Oracle user %s at %s or simple ENTER (The input will be hidden if supported by the OS platform)' % ( oraUser, envSuffix ) )
+    if pwToUse == "" :
+      pwToUse= passwordEnv
+
+  return pwToUse
 
 
 ####
@@ -255,7 +270,7 @@ EXIT
 
 
 
-def spoolScriptWithSqlplusTempClob ( spoolDestRoot, dirSep, dbObjects, conn= None ): 
+def spoolScriptWithSqlplusTempClob ( spoolDestRoot, dirSep, dbObjects, conn= None, envCode= None, clobTempTable = 'tt_extract_ddl_clob' ): 
   """ Use sqlplus 
     This method requires a global table accessible by the connecting user to write 
     the source code extracted from DBA_SOURCE line by line as CLOB 
@@ -327,7 +342,7 @@ BEGIN
     ELSE lv_object_type
     END;
 
-  EXECUTE IMMEDIATE 'truncate  table tt_extract_ddl_clob';
+  EXECUTE IMMEDIATE 'truncate  table {clobTempTable}';
   FOR rec IN (
     SELECT line, text
     FROM dba_source
@@ -341,7 +356,7 @@ BEGIN
     -- dbms_OUTPUT.put_line( 'Ln'||$$plsql_line||': '||lv_offset );
     -- IF mod(rec.line, 13) = 1 THEN       dbms_output.put_line( rec.text );    END IF;
   END LOOP;
-  INSERT INTO tt_extract_ddl_clob( text ) VALUES ( lv_clob );
+  INSERT INTO {clobTempTable} ( text ) VALUES ( lv_clob );
   COMMIT;
 END;
 /
@@ -351,7 +366,7 @@ set termout off trimspool on head off
 spool &spool_path_current
 
 
-SELECT text FROM tt_extract_ddl_clob ;
+SELECT text FROM {clobTempTable} ;
 
 spool off
 """
@@ -360,7 +375,7 @@ spool off
 EXIT
 """
 
-  password = getOraPassword ( oraUser= username, oraPasswordEnvVar= 'ORA_SECRET', batchMode= False )
+  password = getOraPassword ( oraUser= username, oraPasswordEnvVar= 'ORA_SECRET', batchMode= False, envSuffix= envCode  )
 
   ezConnect = """%s/"%s"@(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=%s)(PORT=%s)))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=%s)))""" % ( username, password, host, port, service )
   spoolPath = tempfile.mktemp()
@@ -377,10 +392,12 @@ EXIT
     sqlpTermoutFh = open( sqlTermoutPath, "r" )
     _dbx( sqlpTermoutFh.readlines() )
   else: # build one script block per DBObject
-    
+    _infoTs( "The connecting user will need access to global temporary table %s !" % clobTempTable )
     scriptBlocks= []
     for obj in dbObjects:
-      scriptBlocks.append( scriptBlockFor1Object.format( spool_dest_root= spoolDestRoot, lv_schema= obj.owner, lv_object_type= obj.type, lv_object_name= obj.name, dir_sep= dirSep ) )
+      scriptBlocks.append( scriptBlockFor1Object.format( spool_dest_root= spoolDestRoot, 
+        lv_schema= obj.owner, lv_object_type= obj.type, lv_object_name= obj.name, dir_sep= dirSep,
+        clobTempTable = clobTempTable ) )
 
     _dbx( "len( scriptBlocks ) : %d " % len( scriptBlocks ) )
 
