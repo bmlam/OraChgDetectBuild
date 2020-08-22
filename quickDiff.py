@@ -18,7 +18,7 @@ import charCounter, plstopa, fsm, oraUtils
 g_defaultBranchName = "branch_xyz"
 
 g_mapDbNameOfEnvCode = { "gd1" : "PDBLIONGD1"
-, "gt2" : "PDBLIONGT2"
+, "sit" : "PDBLIONSIT"
 , "uat1" : "LIONPREP"
 , "uat2" : "LIONUAT"
 , "prod" : "LIONP01"

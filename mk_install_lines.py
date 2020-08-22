@@ -186,7 +186,8 @@ All processes in groups xxx, yyy must be stopped
     else:
       script4Schema = script4Schema.format( placeHolderStoreReleaseMetadata = "", baselineCommit= baseCommit, featureName= featureName )
 
-    scriptPathBat = os.path.join( tmpDir, "install_%s.bat" % ( schema ) )
+    batScriptBaseName = "install_%s%s.bat" % ( schema, suffixUsed )
+    scriptPathBat = os.path.join( tmpDir, batScriptBaseName )
     fh = open( scriptPathSql, mode= "w" ); fh.write( script4Schema ); fh.close()
     sqlScriptBaseName = os.path.basename( scriptPathSql )
 
@@ -266,11 +267,12 @@ def action_createZip( files ):
   zipArcPath = tempfile.mkstemp( suffix = ".zip") [1]
   _dbx( "zipArcPath  type %s" %  zipArcPath )
 
-  if True:
-    with zipfile.ZipFile( zipArcPath, 'w') as zipArc:
-     for filePath in pathsUsed:
+  with zipfile.ZipFile( zipArcPath, 'w') as zipArc:
+   for filePath in pathsUsed:
+     if os.path.exists( filePath ):
        zipArc.write(filePath)
-
+     else: 
+       _infoTs( "File at path %s does NOT exist!" % filePath )
   return zipArcPath 
 
 def main(): 
@@ -298,6 +300,7 @@ def main():
     createSchemataInstallScripts( sqlScriptTemplatePath= sqlInstallTemplateFile  \
       , baseCommit= cmdLnConfig.baseCommit, lastCommit= cmdLnConfig.lastCommit \
       , featureName= cmdLnConfig.featureName, storeReleaseMetadata = cmdLnConfig.storeRelMeta  \
+      , fileSufix= cmdLnConfig.featureName \
       ) 
   elif cmdLnConfig.action == "zip":
     zipFile = action_createZip( files = linesOfTouchedScripts )
