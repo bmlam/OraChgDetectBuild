@@ -39,16 +39,15 @@ def parseCmdLine() :
 
   parser = argparse.ArgumentParser()
   # lowercase shortkeys
-  parser.add_argument( '-a', '--action', choices= ['dbs', 'extract', 'grepInst', 'os', 'testJson' ], help=
-  """dbs: input are from databases, grepInst: extract install objects from install scripts , os: input is file path 
+  parser.add_argument( '-a', '--action', choices= ['dbs', 'extract',  'os', 'testJson' ], help=
+  """dbs: input are from databases, os: input is comma separated file paths 
   """
 , required= True )
   parser.add_argument( '-b', '--baseLocation', help='base location of input files' )
   # parser.add_argument( '-c', '--connectQuad', help='Oracle connect 4-tuple h:p:s:u to the database to extract scripts from' )
   parser.add_argument( '-e', '--environments' , help='comma separated list of environment codes, e.g prod, uat2, gt2', required= False )
   parser.add_argument( '-f', '--featureName', help='branch or feature name, will be used to qualify the file name', default= g_defaultBranchName  )  
-  parser.add_argument( '-i', '--inputFilePath' , help='path to input file', required= False )
-  parser.add_argument( '-I', '--inputRelPaths' , help='comma separated input file paths', required= False )
+  parser.add_argument( '-I', '--inputFilePaths' , help='comma separated input file paths', required= False )
   parser.add_argument( '-j', '--jsonCfgFile' , help='json file containing various input data', required= False )
   parser.add_argument( '-o', '--objects' , help='comma separated list of objects, e.g: process.sk_process_control.pks', required= False )
   parser.add_argument( '--debug', help='print debugging messages', required= False, action='store_true' )
@@ -60,16 +59,13 @@ def parseCmdLine() :
   if result.action == 'dbs':
     if result.environments == None or result.objects == None: 
       _errorExit( "Action '%s' requires both env codes ans object list" % (result.action ) ) 
-  elif result.action == 'grepInst':
-    if result.baseLocation == None or result.inputRelPaths == None: 
-      _errorExit( f"Action {result.action} require baseLocation and inputRelPaths" ) 
   elif result.action == 'extract':
     #if result.connectQuad == None or result.objects == None:  _errorExit( "Action '%s' require connectQuad and objects" % (result.action ) ) 
     if result.environments == None or result.objects == None: 
       _errorExit( "Action '%s' requires both env codes ans object list" % (result.action ) ) 
   elif result.action == 'os':
-    if result.inputFilePath == None : 
-      _errorExit( "Action '%s' require inputFilePath" % (result.action ) ) 
+    if result.inputFilePaths == None : 
+      _errorExit( "Action '%s' require inputFilePaths" % (result.action ) ) 
   elif result.action == 'testJson':
     if result.jsonCfgFile == None : 
       _errorExit( "Action '%s' require jsonCfgFile" % (result.action ) ) 
@@ -267,10 +263,10 @@ def action_dbs ( envCsv, objCsv ):
     open( diffRepFile, "w" ).write(  concatDiffReport ) 
     _infoTs( "Diff report generated as %s " % ( diffRepFile ) )
   
-def action_grepInst ( baseLocation, inputRelPaths ):
+def xx_action_grepInst ( baseLocation, inputFilePaths ):
   objectScripts = []
   _dbx( baseLocation )
-  for relPath in inputRelPaths.split(","):
+  for relPath in inputFilePaths.split(","):
     # relPath = relPath.replace( "/", "\\" )
     dir_name, file_name = os.path.split( relPath )
     schema = dir_name 
@@ -290,10 +286,13 @@ def action_grepInst ( baseLocation, inputRelPaths ):
   else: 
     _infoTs( "No object scripts have been identified!" ) 
 
-def action_os ( inputFilePath, branchName= g_defaultBranchName ):
+def action_os ( inputFilePaths, branchName= g_defaultBranchName ):
+  # assert all input files exist 
+  for inputFilePath in inputFilePaths.split(","):
     if not os.path.exists( inputFilePath ):
       raise ValueError( "File %s does not seem to exist!" % ( inputFilePath ) ) 
-    else:
+  # now we have asserted all input files ... 
+  for inputFilePath in inputFilePaths.split(","):
       prefix, fileExt = os.path.splitext( os.path.basename( inputFilePath ) )
       newBaseName = prefix + '-' + branchName + "-orgF" + fileExt 
       tgtPathOfOrgFile = os.path.join( g_diffLocation, newBaseName )
@@ -323,10 +322,10 @@ def main():
     action_dbs( envCsv= argParserResult.environments, objCsv = argParserResult.objects )
   elif argParserResult.action == 'extract':
     action_extractScripts( objCsv= argParserResult.objects, envCsv = argParserResult.environments )
-  elif argParserResult.action == 'grepInst':
-    action_grepInst( baseLocation= argParserResult.baseLocation, inputRelPaths = argParserResult.inputRelPaths )
+#  elif argParserResult.action == 'grepInst':
+#    action_grepInst( baseLocation= argParserResult.baseLocation, inputFilePaths = argParserResult.inputFilePaths )
   elif argParserResult.action == 'os':
-    action_os( inputFilePath = argParserResult.inputFilePath, branchName= argParserResult.featureName )
+    action_os( inputFilePaths = argParserResult.inputFilePaths, branchName= argParserResult.featureName )
   elif argParserResult.action == 'testJson':
     action_testJson( inputFilePath = argParserResult.jsonCfgFile )
 
