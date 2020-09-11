@@ -31,7 +31,7 @@ ACCEPT releasename DEFAULT &release_tag PROMPT "enter releasename of current rel
 --------------------------------------------------------------------------------
 -- activate logging
 --------------------------------------------------------------------------------
-SPOOL install_<TARGET_SCHEMA>.log
+SPOOL install_<TARGET_SCHEMA>-{featureName}.log
 
 --------------------------------------------------------------------------------
 -- information about connection

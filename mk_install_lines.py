@@ -28,7 +28,7 @@ def parseCmdLine() :
   parser.add_argument( '-t', '--sqlScriptTemplatePath', help='path of install script template', required= False )
   parser.add_argument( '--debug', help='print debugging messages', required= False, action='store_true' )
   parser.add_argument( '--no-debug', help='do not print debugging messages', dest='debug', action='store_false'  )
-  parser.add_argument( '--storeRelMeta', help='store release metadata to DB', required= False, action='store_true' )
+  parser.add_argument( '--storeRelMeta', help='store release metadata to DB', required= False, action='store_true', default= True )
   parser.add_argument( '--no-storeRelMeta', help='do not store release metadata to DB', dest='storeRelMeta', action='store_false'  )
   # long keywords only
   # parser.add_argument( '--batch_mode', dest='batch_mode', action='store_true', help= "Run in batch mode. Interactive prompts will be suppressed" )
