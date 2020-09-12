@@ -1,4 +1,5 @@
-#! /c/Users/bonlam/AppData/Local/Programs/Python/Python37-32/python3
+#! /usr/local/bin/python3
+
 """ This program takes a list of relative paths from a file tree complying to the 
 ICE PLSQL repo file structure and "sorts" the files based on object type folder or file extension 
 In the end the list of files are emitted with a proper start command in sorted order.
@@ -10,20 +11,24 @@ call example:
 
 import argparse, inspect, os, re, subprocess, sys, tempfile , zipfile 
 from dbx import _dbx, _infoTs, _errorExit, setDebug
+from textFileUtils import getGitCurrBranchName
 
 g_path_separator = "\\"
 g_internalSepator = ":" 
 g_excludeTouchWithExtensions = [ '.BAT', '.DOCX', '.TXT'  ]
+g_unknownFeature = "unknown_feature"
 
 def dosPath2Unix( inp ):
   return inp.replace( "C:" , r"/c/" ).replace( "\\", r"/" )
 
 def parseCmdLine() :
+  global g_unknownFeature
+
   parser = argparse.ArgumentParser()
   # lowercase shortkeys
-  parser.add_argument( '-a', '--action', help='make: create the install scripts, extract: only print touched scripts, zip: files touched since baseCommit', choices=[ 'extract', 'make', 'zip' ], default="make" )
+  parser.add_argument( '-a', '--action', help='make: create the install scripts, extract: only print touched scripts, zip: files touched since baseCommit', choices=[ 'extract', 'make', 'zip', 'devTest' ], default="make" )
   parser.add_argument( '-b', '--baseCommit', help='baseline commit, used to determined touched scripts up to HEAD' )
-  parser.add_argument( '-f', '--featureName', help='branch or feature name, will be used as part of install SQL script names', default="unknown_feature"  )
+  parser.add_argument( '-f', '--featureName', help='branch or feature name, will be used as part of install SQL script names', default= g_unknownFeature  )
   parser.add_argument( '-l', '--lastCommit', help='last commit, used to determined touched scripts from base up to here', required= False, default= "HEAD" )
   parser.add_argument( '-t', '--sqlScriptTemplatePath', help='path of install script template', required= False )
   parser.add_argument( '--debug', help='print debugging messages', required= False, action='store_true' )
@@ -213,7 +218,7 @@ All processes in groups xxx, yyy must be stopped
   _infoTs( "readme file unix-style >>>>> %s \nDOS style >>>: %s" % ( dosPath2Unix(readmeFile), readmeFile) ) 
 
 def extractTouchedScripts( commitA, commitB="HEAD" ):
-  """ STILL in development (not so critical) 
+  """ extract scripts which have been modfified or added between 2 commits 
   """
   args = ["git", "diff" , "--name-only" , commitA, commitB ]
   outFh, tmpOutFile = tempfile.mkstemp()
@@ -276,11 +281,15 @@ def action_createZip( files ):
   return zipArcPath 
 
 def main(): 
-  global g_listIndexedBySchemaType
+  global g_listIndexedBySchemaType, g_unknownFeature 
 
   
   cmdLnConfig = parseCmdLine()
   setDebug( cmdLnConfig.debug ) 
+
+  usedFeatureName = getGitCurrBranchName() if cmdLnConfig.featureName == g_unknownFeature else cmdLnConfig.featureName
+  _infoTs( "usedFeatureName: %s" % usedFeatureName )
+
   if cmdLnConfig.baseCommit:
     linesOfTouchedScripts = extractTouchedScripts( commitA= cmdLnConfig.baseCommit, commitB = cmdLnConfig.lastCommit )
   else: 
@@ -305,6 +314,8 @@ def main():
   elif cmdLnConfig.action == "zip":
     zipFile = action_createZip( files = linesOfTouchedScripts )
     _infoTs( "zip file created at %s" % zipFile )
+  elif cmdLnConfig.action == "devTest":
+    pass
 
 if __name__ == "__main__" : 
   main()

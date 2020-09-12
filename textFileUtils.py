@@ -48,3 +48,24 @@ def persistAndPrintName( textName, textContent, baseNamePrefix ):
   fh = open( outPath, "w")
   fh.write( "\n".join(textContent ) ) 
   return outPath 
+
+
+def getGitCurrBranchName():
+  args = ["git", "branch" ]
+  outFh, tmpOutFile = tempfile.mkstemp()
+  _dbx( "using %s to capture output from git branch \nunix-style: %s" % ( tmpOutFile, tmpOutFile ) )
+  # outFh = open( tmpOutFile, "w" )
+  subprocess.run( args, stdout = outFh )
+  
+  # _errorExit("test exit") 
+  gitOutLines = open( tmpOutFile, "r" ).readlines()
+  if len( gitOutLines ) == 0 :
+    _errorExit( "No lines found in git branch output file %s" % ( tmpOutFile ) )
+
+  branchName= None
+  for line in gitOutLines:
+    if line.startswith( '*'):
+      branchName = line.split()[1]
+
+  return branchName
+
