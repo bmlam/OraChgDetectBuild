@@ -1,4 +1,5 @@
-#! /c/Users/bonlam/AppData/Local/Programs/Python/Python37-32/python3
+#! /Library/Frameworks/Python.framework/Versions/3.8/bin/python3
+
 """
   Copy DDL files extracted in given location to a folder for diff. 
   In a feature version, we want to extract the script directly
@@ -39,7 +40,7 @@ def parseCmdLine() :
 
   parser = argparse.ArgumentParser()
   # lowercase shortkeys
-  parser.add_argument( '-a', '--action', choices= ['dbs', 'extract',  'os', 'testJson' ], help=
+  parser.add_argument( '-a', '--action', choices= ['dbs', 'extract',  'os', 'testJson' , 'devTest' ], help=
   """dbs: input are from databases, os: input is comma separated file paths 
   """
 , required= True )
@@ -220,6 +221,13 @@ def action_extractScripts( objCsv, envCsv, executeScript= True, connData= None )
       subprocess.call( f"sqlplus /nolog @{sqlplusScriptPath}" )
       _infoTs( "Executed sqlplus script.", True )
   
+def getDiffLineCounts( fileA, fileB ):
+  contentA = open(fileA.strip(), "r").readlines()
+  contentB = open(fileB.strip(), "r").readlines()
+  diffOutput = difflib.context_diff( contentA, contentB, fromfile="fileA", tofile= "fileB", n=1 )
+  
+  return diffOutput
+
 def getHtmlDiffOutput( fileA, fileB ):
   contentA = open(fileA.strip(), "r").readlines()
   contentB = open(fileB.strip(), "r").readlines()
@@ -313,6 +321,9 @@ def action_testJson ( inputFilePath):
     connDataList = jData[ "connectData" ]
     print( connDataList )
 
+def action_devTest():
+	diffOutput = getDiffLineCounts( "fileA.txt", "fileB.txt")
+	sys.stdout.writelines( diffOutput )
 
 def main():
   argParserResult = parseCmdLine()
@@ -328,6 +339,10 @@ def main():
     action_os( inputFilePaths = argParserResult.inputFilePaths, branchName= argParserResult.featureName )
   elif argParserResult.action == 'testJson':
     action_testJson( inputFilePath = argParserResult.jsonCfgFile )
+  elif argParserResult.action == 'devTest':
+    action_devTest()
+  else:
+  	_errorExit( "action  %s is not yet implemented" % (argParserResult.action) )
 
 if __name__ == "__main__" : 
   main()
