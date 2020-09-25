@@ -9,7 +9,7 @@ call example:
 
 """
 
-import argparse, inspect, os, re, subprocess, sys, tempfile , zipfile 
+import argparse, inspect, os, re, subprocess, sys, tempfile , zipfile
 from dbx import _dbx, _infoTs, _errorExit, setDebug
 from textFileUtils import getGitCurrBranchName
 
@@ -26,7 +26,7 @@ def parseCmdLine() :
 
   parser = argparse.ArgumentParser()
   # lowercase shortkeys
-  parser.add_argument( '-a', '--action', help='make: create the install scripts, extract: only print touched scripts, zip: files touched since baseCommit', choices=[ 'extract', 'make', 'zip', 'devTest' ], default="make" )
+  parser.add_argument( '-a', '--action', help='make: create the install scripts, extract: only print touched scripts, zip: files touched since baseCommit', choices=[ 'extract', 'make', 'zip', 'devTest' ] )
   parser.add_argument( '-b', '--baseCommit', help='baseline commit, used to determined touched scripts up to HEAD' )
   parser.add_argument( '-f', '--featureName', help='branch or feature name, will be used as part of install SQL script names', default= g_unknownFeature  )
   parser.add_argument( '-l', '--lastCommit', help='last commit, used to determined touched scripts from base up to here', required= False, default= "HEAD" )
@@ -249,7 +249,7 @@ def extractTouchedScripts( commitA, commitB="HEAD" ):
   _dbx( len( scriptsSet) )
   return list( scriptsSet )
 
-def action_createZip( files ):
+def action_createFileTree( files, targetLocation ):
   """zip the given files:
   1. if at least 1 file starts with root, find a common root of all. In worst case it is the root. 
      For example /a/b/file1.txt and /a/foo/bar.py  would have /a as common root 
@@ -272,17 +272,24 @@ def action_createZip( files ):
   zipArcPath = tempfile.mkstemp( suffix = ".zip") [1]
   _dbx( "zipArcPath  type %s" %  zipArcPath )
 
-  with zipfile.ZipFile( zipArcPath, 'w') as zipArc:
+  with zipfile.ZipFile( zipArcPath, 'w') as zipWriter:
    for filePath in pathsUsed:
      if os.path.exists( filePath ):
-       zipArc.write(filePath)
+       zipWriter.write(filePath)
      else: 
        _infoTs( "File at path %s does NOT exist!" % filePath )
+
+  # for more efficiency, unzip it to the target location 
+  with zipfile.ZipFile( zipArcPath, 'r') as zipReader:
+    _infoTs( "creating file tree in %s ... " % targetLocation )
+    zipReader.extractall( path= targetLocation, members= None ) # imples all members 
+
   return zipArcPath 
 
 def main(): 
   global g_listIndexedBySchemaType, g_unknownFeature 
-
+  homeLocation = os.path.expanduser( "~" )
+  _dbx( homeLocation )
   
   cmdLnConfig = parseCmdLine()
   setDebug( cmdLnConfig.debug ) 
@@ -308,13 +315,14 @@ def main():
     fill_listIndexedBySchemaType( linesOfTouchedScripts= linesOfTouchedScripts ) 
     createSchemataInstallScripts( sqlScriptTemplatePath= sqlInstallTemplateFile  \
       , baseCommit= cmdLnConfig.baseCommit, lastCommit= cmdLnConfig.lastCommit \
-      , featureName= cmdLnConfig.featureName, storeReleaseMetadata = cmdLnConfig.storeRelMeta  \
-      , fileSufix= cmdLnConfig.featureName \
+      , featureName= usedFeatureName, storeReleaseMetadata = cmdLnConfig.storeRelMeta  \
+      , fileSufix= usedFeatureName \
       ) 
   elif cmdLnConfig.action == "zip":
-    zipFile = action_createZip( files = linesOfTouchedScripts )
-    _infoTs( "zip file created at %s" % zipFile )
+    zipFile = action_createFileTree( files = linesOfTouchedScripts, targetLocation= os.path.join( homeLocation, 'Downloads', usedFeatureName ) )
+    _infoTs( "zip file can also be viewed at %s" % zipFile )
   elif cmdLnConfig.action == "devTest":
+    _dbx( "got here")
     pass
 
 if __name__ == "__main__" : 
