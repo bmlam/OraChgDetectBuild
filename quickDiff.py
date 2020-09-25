@@ -12,7 +12,7 @@ import argparse, difflib, enum, json, os, re, subprocess, sys, shutil, tempfile,
 
 ## my modules 
 from dbx import _dbx, _infoTs, _errorExit, setDebug
-from textFileUtils import genUnixDiff, persistAndPrintName
+from textFileUtils import genUnixDiff, persistAndPrintName, getGitCurrBranchName
 import charCounter, plstopa, fsm, oraUtils 
 
 g_defaultBranchName = "branch_xyz"
@@ -39,23 +39,27 @@ def parseCmdLine() :
 
   parser = argparse.ArgumentParser()
   # lowercase shortkeys
-  parser.add_argument( '-a', '--action', choices= ['dbs', 'extract',  'os', 'testJson' ], help=
+  parser.add_argument( '-a', '--action', choices= ['dbs', 'extract',  'os', 'testJson', 'twoRepos' ], help=
   """dbs: input are from databases, os: input is comma separated file paths 
+  twoRepos: provide the root location of 2 git repos on the local PC. This program will cd to the root location and extract the branch name. Input file paths are extracted from --jsonCfgFile, attribute inputFilePaths
   """
 , required= True )
   parser.add_argument( '-b', '--baseLocation', help='base location of input files' )
-  # parser.add_argument( '-c', '--connectQuad', help='Oracle connect 4-tuple h:p:s:u to the database to extract scripts from' )
   parser.add_argument( '-e', '--environments' , help='comma separated list of environment codes, e.g prod, uat2, gt2', required= False )
-  parser.add_argument( '-f', '--featureName', help='branch or feature name, will be used to qualify the file name', default= g_defaultBranchName  )  
+  parser.add_argument( '-f', '--featureName', help='branch or feature name, will be used to qualify the file name'   )  
   parser.add_argument( '-I', '--inputFilePaths' , help='comma separated input file paths', required= False )
-  parser.add_argument( '-j', '--jsonCfgFile' , help='json file containing various input data', required= False )
+  parser.add_argument( '-j', '--jsonCfgFile' , help='json file containing various input data', default="/c/projects/bmlam-git_clones/OraChgDetectBuild/test_input_paths.json" )
   parser.add_argument( '-o', '--objects' , help='comma separated list of objects, e.g: process.sk_process_control.pks', required= False )
   parser.add_argument( '--debug', help='print debugging messages', required= False, action='store_true' )
   parser.add_argument( '--no-debug', help='do not print debugging messages', dest='debug', action='store_false'  )
 
   result= parser.parse_args()
 
-
+  if result.featureName == None:
+    result.featureName = getGitCurrBranchName()
+    if result.featureName == None:
+      result.featureName = g_defaultBranchName
+      
   if result.action == 'dbs':
     if result.environments == None or result.objects == None: 
       _errorExit( "Action '%s' requires both env codes ans object list" % (result.action ) ) 
@@ -262,29 +266,6 @@ def action_dbs ( envCsv, objCsv ):
     diffRepFile = tempfile.mkstemp( suffix= "-accu-diffs.html" )[1]
     open( diffRepFile, "w" ).write(  concatDiffReport ) 
     _infoTs( "Diff report generated as %s " % ( diffRepFile ) )
-  
-def xx_action_grepInst ( baseLocation, inputFilePaths ):
-  objectScripts = []
-  _dbx( baseLocation )
-  for relPath in inputFilePaths.split(","):
-    # relPath = relPath.replace( "/", "\\" )
-    dir_name, file_name = os.path.split( relPath )
-    schema = dir_name 
-    #_dbx( f"dir {dir_name} file {file_name}" )
-    fullPath = os.path.join( baseLocation , dir_name, file_name )
-    _infoTs( f"grep'ing {fullPath}.." )
-    for line in open( fullPath, 'r').readlines():
-      match = re.search( "^(STA|STAR|START|@@)\s*(.*)$" , line.lstrip().upper() )
-      if match != None:
-        # _dbx( f"{len( match.groups() )}" )
-        objScript = match.group(2)
-        if not objScript.startswith( "DML\\"):
-          #_dbx( f"objScript: {objScript}" )
-          objectScripts.append( os.path.join ( schema , objScript ) )
-  if len( objectScripts ) > 0:
-    _infoTs( "Following object scripts have been identified: \n%s" % "\n".join ( objectScripts ) ) 
-  else: 
-    _infoTs( "No object scripts have been identified!" ) 
 
 def action_os ( inputFilePaths, branchName= g_defaultBranchName ):
   # assert all input files exist 

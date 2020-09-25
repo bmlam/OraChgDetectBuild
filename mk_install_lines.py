@@ -1,4 +1,4 @@
-#! /usr/local/bin/python3
+#! /c/Users/bonlam/AppData/Local/Programs/Python/Python37-32/python3
 
 """ This program takes a list of relative paths from a file tree complying to the 
 ICE PLSQL repo file structure and "sorts" the files based on object type folder or file extension 
