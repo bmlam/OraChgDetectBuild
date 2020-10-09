@@ -266,6 +266,7 @@ def getDiffStatsFromFiles( fileA, fileB ):
   contentB = open(fileB.strip(), "r").readlines()
 
   lnCntA, lnCntB, newCnt, delOrChgCnt, diffGrade = getDiffStatsFromContents( contentA= contentA, contentB= contentB )
+  return lnCntA, lnCntB, newCnt, delOrChgCnt, diffGrade 
 
 def getHtmlDiffOutput( fileA, fileB ):
   contentA = open(fileA.strip(), "r").readlines()
@@ -280,6 +281,10 @@ def getHtmlDiffOutput( fileA, fileB ):
   
 def action_dbs ( envCsv, objCsv ):
   """ Extract DDL script for objects given by cmdArgs
+  When we compare DDLs from 2 databases, the following additional task is performed:
+  1. compute the diff grade of the original DDLs
+  2. If the diff grade is zero or we generate the HTML diff report using the original DDLs 
+  3. If the diff grade is high, we generate the HTML diff report using the formatted DDLs 
   """
   objectList = getObjectList( objCsv )
   # _errorExit( "test exit %s" % ( len( objectList ) ) ) 
@@ -301,9 +306,16 @@ def action_dbs ( envCsv, objCsv ):
   if len( envList ) == 2:
     # _errorExit( "getHtmlDiffOutput method coded but not yet used! " )
     for i in range( len( dbOneOriginPaths ) ):
-      file1 = dbOneOriginPaths[i]
-      file2 = dbTwoOriginPaths[i]
-      concatDiffReport +=  getHtmlDiffOutput( fileA= file1, fileB= file2 ) 
+      fileAOrigin = dbOneOriginPaths[i]
+      fileBOrigin = dbTwoOriginPaths[i]
+      lnCntA, lnCntB, newCnt, delOrChgCnt, diffGrade = getDiffStatsFromFiles( fileA= fileAOrigin, fileB= fileBOrigin ) 
+      if diffGrade == 0 or diffGrade == 1 :
+        concatDiffReport +=  getHtmlDiffOutput( fileA= fileAOrigin, fileB= fileBOrigin ) 
+      else:
+        fileAFormatted = dbOneFormattedPaths[i]
+        fileBFormatted = dbTwoFormattedPaths[i]
+        concatDiffReport +=  getHtmlDiffOutput( fileA= fileAFormatted, fileB= fileBFormatted ) 
+
       _dbx( len( concatDiffReport ) )
 
     diffRepFile = tempfile.mkstemp( suffix= "-accu-diffs.html" )[1]
