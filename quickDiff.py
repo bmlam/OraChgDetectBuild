@@ -1,4 +1,4 @@
-#! /Library/Frameworks/Python.framework/Versions/3.8/bin/python3
+#! /c/Users/bonlam/AppData/Local/Programs/Python/Python37-32/python3
 
 """
   Copy DDL files extracted in given location to a folder for diff. 
@@ -221,12 +221,51 @@ def action_extractScripts( objCsv, envCsv, executeScript= True, connData= None )
       subprocess.call( f"sqlplus /nolog @{sqlplusScriptPath}" )
       _infoTs( "Executed sqlplus script.", True )
   
-def getDiffLineCounts( fileA, fileB ):
+def getDiffStatsFromContents( contentA, contentB ):
+  lnCntA = len( contentA ) 
+  lnCntB = len( contentB ) 
+  _dbx( "lnCntA %d" % (lnCntA ) )
+  diffOutput = difflib.context_diff( contentA, contentB, fromfile="fileA", tofile= "fileB", n=1 )
+  newCnt = 0; delOrChgCnt = 0 
+  for ln in diffOutput:
+    if ln.startswith( "! "): delOrChgCnt += 1
+    elif ln.startswith( "+ "): newCnt += 1
+  _dbx( "B has %d new lines and %d changed or deleted lines versus B" % (newCnt, delOrChgCnt ) )
+  _dbx( "newCnt: %d" % ( newCnt ) )
+  _dbx( "delOrChgCnt: %d" % ( delOrChgCnt ) )
+  
+  maxLnCnt = lnCntA if lnCntA > lnCntB else lnCntB 
+  minLnCnt = lnCntA if lnCntA < lnCntB else lnCntA  
+  if maxLnCnt == 0: maxLnCnt = 1
+  if minLnCnt == 0: minLnCnt = 1
+  avgLnCnt = (maxLnCnt + minLnCnt) / 2 
+  _dbx( "minLnCnt: %d" %( minLnCnt) )
+  _dbx( "maxLnCnt: %d" %( maxLnCnt) )
+  _dbx( "avgLnCnt: %d" %( avgLnCnt) )
+  # diffGrade meaning:
+  # 0: no delta at all
+  # 1: minor changes 
+  # 2: substantial changes
+  if ( maxLnCnt > minLnCnt * 2 ):
+    diffGrade = 2 
+  elif ( avgLnCnt > (newCnt + delOrChgCnt) * 10 ):
+    diffGrade = 1
+  elif avgLnCnt < 100 and (newCnt + delOrChgCnt) <= 10 :
+    diffGrade = 1
+  elif ( (newCnt + delOrChgCnt) == 0 ):
+    diffGrade = 0 
+  else :
+    _dbx( "default diffGrade" )
+    diffGrade = 2
+  _dbx( diffGrade )
+
+  return lnCntA, lnCntB, newCnt, delOrChgCnt, diffGrade
+
+def getDiffStatsFromFiles( fileA, fileB ):
   contentA = open(fileA.strip(), "r").readlines()
   contentB = open(fileB.strip(), "r").readlines()
-  diffOutput = difflib.context_diff( contentA, contentB, fromfile="fileA", tofile= "fileB", n=1 )
-  
-  return diffOutput
+
+  lnCntA, lnCntB, newCnt, delOrChgCnt, diffGrade = getDiffStatsFromContents( contentA= contentA, contentB= contentB )
 
 def getHtmlDiffOutput( fileA, fileB ):
   contentA = open(fileA.strip(), "r").readlines()
@@ -271,28 +310,6 @@ def action_dbs ( envCsv, objCsv ):
     open( diffRepFile, "w" ).write(  concatDiffReport ) 
     _infoTs( "Diff report generated as %s " % ( diffRepFile ) )
   
-def xx_action_grepInst ( baseLocation, inputFilePaths ):
-  objectScripts = []
-  _dbx( baseLocation )
-  for relPath in inputFilePaths.split(","):
-    # relPath = relPath.replace( "/", "\\" )
-    dir_name, file_name = os.path.split( relPath )
-    schema = dir_name 
-    #_dbx( f"dir {dir_name} file {file_name}" )
-    fullPath = os.path.join( baseLocation , dir_name, file_name )
-    _infoTs( f"grep'ing {fullPath}.." )
-    for line in open( fullPath, 'r').readlines():
-      match = re.search( "^(STA|STAR|START|@@)\s*(.*)$" , line.lstrip().upper() )
-      if match != None:
-        # _dbx( f"{len( match.groups() )}" )
-        objScript = match.group(2)
-        if not objScript.startswith( "DML\\"):
-          #_dbx( f"objScript: {objScript}" )
-          objectScripts.append( os.path.join ( schema , objScript ) )
-  if len( objectScripts ) > 0:
-    _infoTs( "Following object scripts have been identified: \n%s" % "\n".join ( objectScripts ) ) 
-  else: 
-    _infoTs( "No object scripts have been identified!" ) 
 
 def action_os ( inputFilePaths, branchName= g_defaultBranchName ):
   # assert all input files exist 
@@ -322,8 +339,8 @@ def action_testJson ( inputFilePath):
     print( connDataList )
 
 def action_devTest():
-	diffOutput = getDiffLineCounts( "fileA.txt", "fileB.txt")
-	sys.stdout.writelines( diffOutput )
+	diffOutput = getDiffStatsFromFiles( "fileA.txt", "fileB.txt")
+	# sys.stdout.writelines( diffOutput )
 
 def main():
   argParserResult = parseCmdLine()
