@@ -2,7 +2,7 @@ import inspect, os.path, sys, time
 
 g_dbxActive = True 
 g_dbxCnt = 0
-g_maxDbxMsg = 999
+g_maxDbxMsg = 99999
 
 g_modLineOccur = {}
 g_modLineKeepalive = {}

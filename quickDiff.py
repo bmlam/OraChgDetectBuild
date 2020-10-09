@@ -59,7 +59,7 @@ def parseCmdLine() :
     result.featureName = getGitCurrBranchName()
     if result.featureName == None:
       result.featureName = g_defaultBranchName
-      
+
   if result.action == 'dbs':
     if result.environments == None or result.objects == None: 
       _errorExit( "Action '%s' requires both env codes ans object list" % (result.action ) ) 
@@ -224,6 +224,53 @@ def action_extractScripts( objCsv, envCsv, executeScript= True, connData= None )
       subprocess.call( f"sqlplus /nolog @{sqlplusScriptPath}" )
       _infoTs( "Executed sqlplus script.", True )
   
+def getDiffStatsFromContents( contentA, contentB ):
+  lnCntA = len( contentA ) 
+  lnCntB = len( contentB ) 
+  _dbx( "lnCntA %d" % (lnCntA ) )
+  diffOutput = difflib.context_diff( contentA, contentB, fromfile="fileA", tofile= "fileB", n=1 )
+  newCnt = 0; delOrChgCnt = 0 
+  for ln in diffOutput:
+    if ln.startswith( "! "): delOrChgCnt += 1
+    elif ln.startswith( "+ "): newCnt += 1
+  _dbx( "B has %d new lines and %d changed or deleted lines versus B" % (newCnt, delOrChgCnt ) )
+  _dbx( "newCnt: %d" % ( newCnt ) )
+  _dbx( "delOrChgCnt: %d" % ( delOrChgCnt ) )
+  
+  maxLnCnt = lnCntA if lnCntA > lnCntB else lnCntB 
+  minLnCnt = lnCntA if lnCntA < lnCntB else lnCntA  
+  if maxLnCnt == 0: maxLnCnt = 1
+  if minLnCnt == 0: minLnCnt = 1
+  avgLnCnt = (maxLnCnt + minLnCnt) / 2 
+  _dbx( "minLnCnt: %d" %( minLnCnt) )
+  _dbx( "maxLnCnt: %d" %( maxLnCnt) )
+  _dbx( "avgLnCnt: %d" %( avgLnCnt) )
+  # diffGrade meaning:
+  # 0: no delta at all
+  # 1: minor changes 
+  # 2: substantial changes
+  if ( maxLnCnt > minLnCnt * 2 ):
+    diffGrade = 2 
+  elif ( avgLnCnt > (newCnt + delOrChgCnt) * 10 ):
+    diffGrade = 1
+  elif avgLnCnt < 100 and (newCnt + delOrChgCnt) <= 10 :
+    diffGrade = 1
+  elif ( (newCnt + delOrChgCnt) == 0 ):
+    diffGrade = 0 
+  else :
+    _dbx( "default diffGrade" )
+    diffGrade = 2
+  _dbx( diffGrade )
+
+  return lnCntA, lnCntB, newCnt, delOrChgCnt, diffGrade
+
+def getDiffStatsFromFiles( fileA, fileB ):
+  contentA = open(fileA.strip(), "r").readlines()
+  contentB = open(fileB.strip(), "r").readlines()
+
+  lnCntA, lnCntB, newCnt, delOrChgCnt, diffGrade = getDiffStatsFromContents( contentA= contentA, contentB= contentB )
+  return lnCntA, lnCntB, newCnt, delOrChgCnt, diffGrade 
+
 def getHtmlDiffOutput( fileA, fileB ):
   contentA = open(fileA.strip(), "r").readlines()
   contentB = open(fileB.strip(), "r").readlines()
@@ -237,6 +284,10 @@ def getHtmlDiffOutput( fileA, fileB ):
   
 def action_dbs ( envCsv, objCsv ):
   """ Extract DDL script for objects given by cmdArgs
+  When we compare DDLs from 2 databases, the following additional task is performed:
+  1. compute the diff grade of the original DDLs
+  2. If the diff grade is zero or we generate the HTML diff report using the original DDLs 
+  3. If the diff grade is high, we generate the HTML diff report using the formatted DDLs 
   """
   objectList = getObjectList( objCsv )
   # _errorExit( "test exit %s" % ( len( objectList ) ) ) 
@@ -258,14 +309,22 @@ def action_dbs ( envCsv, objCsv ):
   if len( envList ) == 2:
     # _errorExit( "getHtmlDiffOutput method coded but not yet used! " )
     for i in range( len( dbOneOriginPaths ) ):
-      file1 = dbOneOriginPaths[i]
-      file2 = dbTwoOriginPaths[i]
-      concatDiffReport +=  getHtmlDiffOutput( fileA= file1, fileB= file2 ) 
+      fileAOrigin = dbOneOriginPaths[i]
+      fileBOrigin = dbTwoOriginPaths[i]
+      lnCntA, lnCntB, newCnt, delOrChgCnt, diffGrade = getDiffStatsFromFiles( fileA= fileAOrigin, fileB= fileBOrigin ) 
+      if diffGrade == 0 or diffGrade == 1 :
+        concatDiffReport +=  getHtmlDiffOutput( fileA= fileAOrigin, fileB= fileBOrigin ) 
+      else:
+        fileAFormatted = dbOneFormattedPaths[i]
+        fileBFormatted = dbTwoFormattedPaths[i]
+        concatDiffReport +=  getHtmlDiffOutput( fileA= fileAFormatted, fileB= fileBFormatted ) 
+
       _dbx( len( concatDiffReport ) )
 
     diffRepFile = tempfile.mkstemp( suffix= "-accu-diffs.html" )[1]
     open( diffRepFile, "w" ).write(  concatDiffReport ) 
     _infoTs( "Diff report generated as %s " % ( diffRepFile ) )
+  
 
 def action_os ( inputFilePaths, branchName= g_defaultBranchName ):
   # assert all input files exist 
@@ -294,6 +353,9 @@ def action_testJson ( inputFilePath):
     connDataList = jData[ "connectData" ]
     print( connDataList )
 
+def action_devTest():
+	diffOutput = getDiffStatsFromFiles( "fileA.txt", "fileB.txt")
+	# sys.stdout.writelines( diffOutput )
 
 def main():
   argParserResult = parseCmdLine()
@@ -309,6 +371,10 @@ def main():
     action_os( inputFilePaths = argParserResult.inputFilePaths, branchName= argParserResult.featureName )
   elif argParserResult.action == 'testJson':
     action_testJson( inputFilePath = argParserResult.jsonCfgFile )
+  elif argParserResult.action == 'devTest':
+    action_devTest()
+  else:
+  	_errorExit( "action  %s is not yet implemented" % (argParserResult.action) )
 
 if __name__ == "__main__" : 
   main()
