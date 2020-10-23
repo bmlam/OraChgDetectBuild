@@ -39,16 +39,16 @@ def parseCmdLine() :
 
   parser = argparse.ArgumentParser()
   # lowercase shortkeys
-  parser.add_argument( '-a', '--action', choices= ['dbs', 'extract',  'os', 'testJson', 'twoRepos' ], help=
+  parser.add_argument( '-a', '--action', choices= ['dbs', 'extract',  'os', 'twoRepos', 'devTest' ], help=
   """dbs: input are from databases, os: input is comma separated file paths 
-  twoRepos: provide the root location of 2 git repos on the local PC. This program will cd to the root location and extract the branch name. Input file paths are extracted from --jsonCfgFile, attribute inputFilePaths
+  twoRepos: provide the root location of 2 git repos on the local PC. This program will cd to the root location and extract the branch name. Input file paths are extracted from --inputPathsFromJsonFile, attribute inputFilePaths
   """
 , required= True )
   parser.add_argument( '-b', '--baseLocation', help='base location of input files' )
   parser.add_argument( '-e', '--environments' , help='comma separated list of environment codes, e.g prod, uat2, gt2', required= False )
   parser.add_argument( '-f', '--featureName', help='branch or feature name, will be used to qualify the file name'   )  
   parser.add_argument( '-I', '--inputFilePaths' , help='comma separated input file paths', required= False )
-  parser.add_argument( '-j', '--jsonCfgFile' , help='json file containing various input data', default="/c/projects/bmlam-git_clones/OraChgDetectBuild/test_input_paths.json" )
+  parser.add_argument( '-j', '--inputPathsFromJsonFile' , help='json file containing various input data', default=".\\scripts_for_quickDiff.json" )
   parser.add_argument( '-o', '--objects' , help='comma separated list of objects, e.g: process.sk_process_control.pks', required= False )
   parser.add_argument( '--debug', help='print debugging messages', required= False, action='store_true' )
   parser.add_argument( '--no-debug', help='do not print debugging messages', dest='debug', action='store_false'  )
@@ -68,11 +68,11 @@ def parseCmdLine() :
     if result.environments == None or result.objects == None: 
       _errorExit( "Action '%s' requires both env codes ans object list" % (result.action ) ) 
   elif result.action == 'os':
-    if result.inputFilePaths == None : 
-      _errorExit( "Action '%s' require inputFilePaths" % (result.action ) ) 
-  elif result.action == 'testJson':
-    if result.jsonCfgFile == None : 
-      _errorExit( "Action '%s' require jsonCfgFile" % (result.action ) ) 
+    if result.inputFilePaths == None and result.inputPathsFromJsonFile == None : 
+      _errorExit( "Action '%s' require inputFilePaths or inputPathsFromJsonFile" % (result.action ) ) 
+  elif result.action == 'devTest':
+    if result.inputPathsFromJsonFile == None : 
+      _errorExit( "Action '%s' require inputPathsFromJsonFile" % (result.action ) ) 
 
   return result
 
@@ -326,13 +326,21 @@ def action_dbs ( envCsv, objCsv ):
     _infoTs( "Diff report generated as %s " % ( diffRepFile ) )
   
 
-def action_os ( inputFilePaths, branchName= g_defaultBranchName ):
+def action_os ( inputFilePathsCsv, branchName= g_defaultBranchName, inputPathsFromJsonFile = None ):
+
+  if inputFilePathsCsv and inputPathsFromJsonFile:
+    _infoTs( "both inputFilePaths and inputPathsFromJsonFile have been provided. Will only consider inputFilePaths!" )
+    inputPathsFromJsonFile = None
+    inputFilePaths = inputFilePathsCsv.split(",")
+  if inputPathsFromJsonFile :
+    inputFilePaths = action_devTest( jsonFile = inputPathsFromJsonFile )
+
   # assert all input files exist 
-  for inputFilePath in inputFilePaths.split(","):
+  for inputFilePath in inputFilePaths :
     if not os.path.exists( inputFilePath ):
       raise ValueError( "File %s does not seem to exist!" % ( inputFilePath ) ) 
   # now we have asserted all input files ... 
-  for inputFilePath in inputFilePaths.split(","):
+  for inputFilePath in inputFilePaths:
       prefix, fileExt = os.path.splitext( os.path.basename( inputFilePath ) )
       newBaseName = prefix + '-' + branchName + "-orgF" + fileExt 
       tgtPathOfOrgFile = os.path.join( g_diffLocation, newBaseName )
@@ -343,19 +351,22 @@ def action_os ( inputFilePaths, branchName= g_defaultBranchName ):
       tgtPathOfFormattedFile = os.path.join( g_diffLocation, newBaseName )
       shutil.move( formattedOutPath, tgtPathOfFormattedFile )
       _infoTs( "Formatted file %s moved to target" % ( tgtPathOfFormattedFile ) ) 
+  if inputPathsFromJsonFile:
+    _infoTs( "Only input files specified in %s were considered " % ( inputPathsFromJsonFile ) )
 
-def action_testJson ( inputFilePath):
-    if not os.path.exists( inputFilePath ):
-      _errorExit( "File %s does not seem to exist!" % ( inputFilePath ) ) 
+def action_devTest ( jsonFile ):
+    if not os.path.exists( jsonFile ):
+      _errorExit( "File %s does not seem to exist!" % ( jsonFile ) ) 
 
-    jStr =  open( inputFilePath, "r").read()
+    jStr =  open( jsonFile, "r").read()
     jData = json.loads( jStr )
-    connDataList = jData[ "connectData" ]
-    print( connDataList )
-
-def action_devTest():
-	diffOutput = getDiffStatsFromFiles( "fileA.txt", "fileB.txt")
-	# sys.stdout.writelines( diffOutput )
+    list = jData[ "filePaths" ]
+    filePaths = []
+    for elem in list : # .keys():
+      _dbx( filePaths ) 
+      filePath= elem[ 'path' ]
+      filePaths.append( filePath )
+    return filePaths 
 
 def main():
   argParserResult = parseCmdLine()
@@ -368,11 +379,10 @@ def main():
 #  elif argParserResult.action == 'grepInst':
 #    action_grepInst( baseLocation= argParserResult.baseLocation, inputFilePaths = argParserResult.inputFilePaths )
   elif argParserResult.action == 'os':
-    action_os( inputFilePaths = argParserResult.inputFilePaths, branchName= argParserResult.featureName )
-  elif argParserResult.action == 'testJson':
-    action_testJson( inputFilePath = argParserResult.jsonCfgFile )
+    action_os( inputFilePathsCsv = argParserResult.inputFilePaths, branchName= argParserResult.featureName
+      , inputPathsFromJsonFile= argParserResult.inputPathsFromJsonFile  )
   elif argParserResult.action == 'devTest':
-    action_devTest()
+    action_devTest( jsonFile = argParserResult.inputPathsFromJsonFile )
   else:
   	_errorExit( "action  %s is not yet implemented" % (argParserResult.action) )
 
