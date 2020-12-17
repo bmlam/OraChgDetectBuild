@@ -26,7 +26,7 @@ SET FEEDBACK ON
 SET SQLBLANKLINES ON
 SET TERMOUT ON
 SET DEFINE ON
-ACCEPT releasename DEFAULT &release_tag PROMPT "enter releasename of current release [&release_tag]: "
+ACCEPT releasename DEFAULT &release_tag PROMPT "enter name of this release [&release_tag]: "
 
 --------------------------------------------------------------------------------
 -- activate logging
@@ -147,12 +147,12 @@ REM place_here_scripts_for:PACKAGES.PKB
 PROMPT =========================================================================
 PROMPT install single Procedures...
 PROMPT =========================================================================
-REM place_here_scripts_for:PROCEDURES
+REM place_here_scripts_for:PROCEDURES.PRC 
 
 PROMPT =========================================================================
 PROMPT install single Functions...
 PROMPT =========================================================================
-REM place_here_scripts_for:FUNCTIONS
+REM place_here_scripts_for:FUNCTIONS.FNC 
 
 PROMPT =========================================================================
 PROMPT install Grants provided by other users...
