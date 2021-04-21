@@ -1,12 +1,7 @@
 #! /c/Users/bonlam/AppData/Local/Programs/Python/Python37-32/python3
 
-""" This program takes a list of relative paths from a file tree complying to the 
-ICE PLSQL repo file structure and "sorts" the files based on object type folder or file extension 
-In the end the list of files are emitted with a proper start command in sorted order.
-
-call example: 
-  git log --name-only -5 | grep "/" | egrep -v "^ +" | sort | uniq | mk_install_lines.py  -t $SANDBOX/bin/install_template.sql
-
+""" Assuming that PLSQP and SLQ scripts are organzized in a specific structure, this script 
+will generate a master install script per schema based on the files changed in a given branch.
 """
 
 import argparse, inspect, os, re, subprocess, sys, tempfile , zipfile
@@ -17,6 +12,7 @@ g_path_separator = "\\"
 g_internalSepator = ":" 
 g_excludeTouchWithExtensions = [ '.BAT', '.DOCX', '.TXT'  ]
 g_unknownFeature = "unknown_feature"
+g_filesToExcludeFromInstall = []
 
 def dosPath2Unix( inp ):
   return inp.replace( "C:" , r"/c/" ).replace( "\\", r"/" )
@@ -32,6 +28,7 @@ def parseCmdLine() :
   parser.add_argument( '-l', '--lastCommit', help='last commit, used to determined touched scripts from base up to here', required= False, default= "HEAD" )
   parser.add_argument( '-t', '--sqlScriptTemplatePath', help='path of install script template', required= False )
   parser.add_argument( '--debug', help='print debugging messages', required= False, action='store_true' )
+  parser.add_argument( '--useBlacklist', help='a text file containing changed script that should be exclude from install', default='.make_blacklist.txt' )
   parser.add_argument( '--no-debug', help='do not print debugging messages', dest='debug', action='store_false'  )
   parser.add_argument( '--storeRelMeta', help='store release metadata to DB', required= False, action='store_true', default= True )
   parser.add_argument( '--no-storeRelMeta', help='do not store release metadata to DB', dest='storeRelMeta', action='store_false'  )
@@ -45,6 +42,11 @@ def parseCmdLine() :
 
   if result.lastCommit != None and result.lastCommit != 'HEAD':
     raise ValueError( "currently only HEAD is supported as lastCommit!" ) 
+
+  if result.action in [ "make", "zip" ]:
+    if result.useBlacklist:
+      findFilesToExcludeFromInstall( blacklistPath= result.useBlacklist )
+
   return result
 
 def fill_listIndexedBySchemaType( linesOfTouchedScripts ):
@@ -149,6 +151,7 @@ All processes in groups xxx, yyy must be stopped
   batchScripts = []
   for schema in g_schemataFound:
     _dbx( "schema %s\n" % ( schema ) ) 
+
     script4Schema = scriptTemplateText
     script4Schema = script4Schema.replace( "<TARGET_SCHEMA>" , schema )
     for schemaType in g_listIndexedBySchemaType.keys():
@@ -178,9 +181,12 @@ All processes in groups xxx, yyy must be stopped
         newLines.append( line )
     script4Schema = "\n".join( newLines )
 
+    schemaDir  = os.path.join( tmpDir, schema )
+    os.mkdir( schemaDir )
+
     basenameSqlScript = "install_%s%s.sql" % ( schema, suffixUsed )
     _dbx( basenameSqlScript )
-    scriptPathSql = os.path.join( tmpDir, basenameSqlScript )
+    scriptPathSql = os.path.join( schemaDir, basenameSqlScript )
 
     if storeReleaseMetadata: 
       # for INSERT of applied release information 
@@ -192,7 +198,8 @@ All processes in groups xxx, yyy must be stopped
       script4Schema = script4Schema.format( placeHolderStoreReleaseMetadata = "", baselineCommit= baseCommit, featureName= featureName )
 
     batScriptBaseName = "install_%s%s.bat" % ( schema, suffixUsed )
-    scriptPathBat = os.path.join( tmpDir, batScriptBaseName )
+
+    scriptPathBat =  os.path.join( schemaDir, batScriptBaseName )
     fh = open( scriptPathSql, mode= "w" ); fh.write( script4Schema ); fh.close()
     sqlScriptBaseName = os.path.basename( scriptPathSql )
 
@@ -220,6 +227,8 @@ All processes in groups xxx, yyy must be stopped
 def extractTouchedScripts( commitA, commitB="HEAD" ):
   """ extract scripts which have been modfified or added between 2 commits 
   """
+  global g_filesToExcludeFromInstall
+
   args = ["git", "diff" , "--name-only" , commitA, commitB ]
   outFh, tmpOutFile = tempfile.mkstemp()
   _dbx( "using %s to capture output from git diff \nunix-style: %s" % ( tmpOutFile,  dosPath2Unix( tmpOutFile ) ) )
@@ -245,8 +254,15 @@ def extractTouchedScripts( commitA, commitB="HEAD" ):
         elif staCode == "D":
           scriptsSet.discard( script )
     else:
-      scriptsSet.add( line ) 
+      doExclude = False 
+      for blackLine in g_filesToExcludeFromInstall:
+        if line.strip() == blackLine.strip():
+          doExclude = True; break
+
+        if not doExclude:
+          scriptsSet.add( line ) 
   _dbx( len( scriptsSet) )
+
   return list( scriptsSet )
 
 def action_createFileTree( files, targetLocation ):
@@ -286,6 +302,19 @@ def action_createFileTree( files, targetLocation ):
 
   return zipArcPath 
 
+def findFilesToExcludeFromInstall ( blacklistPath ):
+  """ Example content of blacklist file:
+SYS/Tables/test_only.sql 
+SYSTEM/Packages/test_pkg.sql 
+  """
+  global g_filesToExcludeFromInstall
+  if os.path.exists( blacklistPath ):
+    lines = open( blacklistPath, "r").readlines( )
+    for line in lines:
+      g_filesToExcludeFromInstall.append( line.strip() )
+  else:
+    _infoTs( "Ignoring file %s since it does not seem to exist" % ( blacklistPath ) )
+
 def main(): 
   global g_listIndexedBySchemaType, g_unknownFeature 
   homeLocation = os.path.expanduser( "~" )
@@ -318,9 +347,12 @@ def main():
       , featureName= usedFeatureName, storeReleaseMetadata = cmdLnConfig.storeRelMeta  \
       , fileSufix= usedFeatureName \
       ) 
+    if len( g_filesToExcludeFromInstall )> 0:
+      _infoTs( "Some files may have been excluded based on blacklist!")
   elif cmdLnConfig.action == "zip":
     zipFile = action_createFileTree( files = linesOfTouchedScripts, targetLocation= os.path.join( homeLocation, 'Downloads', usedFeatureName ) )
     _infoTs( "zip file can also be viewed at %s" % zipFile )
+    _infoTs( "Some files may have been excluded based on blacklist!")
   elif cmdLnConfig.action == "devTest":
     _dbx( "got here")
     pass

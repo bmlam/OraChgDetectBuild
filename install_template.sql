@@ -169,6 +169,11 @@ PROMPT install DML scripts required for the release...
 PROMPT =========================================================================
 REM place_here_scripts_for:DML.SQL
 
+PROMPT =========================================================================
+PROMPT install scripts to manage DBMS_SCHEDULER jobs ...
+PROMPT =========================================================================
+REM place_here_scripts_for:SCHEDULER_JOBS.SQL
+
 -- @@"DML\example_DML.sql"
 PROMPT =========================================================================
 PROMPT compile schema <TARGET_SCHEMA>
