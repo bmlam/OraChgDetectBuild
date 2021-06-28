@@ -259,8 +259,8 @@ def extractTouchedScripts( commitA, commitB="HEAD" ):
         if line.strip() == blackLine.strip():
           doExclude = True; break
 
-        if not doExclude:
-          scriptsSet.add( line ) 
+      if not doExclude:
+        scriptsSet.add( line ) 
   _dbx( len( scriptsSet) )
 
   return list( scriptsSet )
@@ -314,6 +314,8 @@ SYSTEM/Packages/test_pkg.sql
       g_filesToExcludeFromInstall.append( line.strip() )
   else:
     _infoTs( "Ignoring file %s since it does not seem to exist" % ( blacklistPath ) )
+  _infoTs( "%d touched files will be ignored due to %s" % ( len(g_filesToExcludeFromInstall), blacklistPath ) )
+  
 
 def main(): 
   global g_listIndexedBySchemaType, g_unknownFeature 
